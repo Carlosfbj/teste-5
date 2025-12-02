@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detector de Fatos e Notícias (Com Gemini e Search)</title>
+    <!-- Carrega Tailwind CSS para estilização moderna e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0d1117; 
+        }
+        .app-card {
+            background-color: #161b22; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid #30363d;
+        }
+        /* Estilos de Borda e Cor de Destaque para os Vereditos */
+        .verdict-false-style {
+            border-left: 6px solid #f87171; /* Vermelho claro */
+            background-color: #3d141d;
+        }
+        .verdict-unverified-style {
+            border-left: 6px solid #facc15; /* Amarelo claro */
+            background-color: #3d341d;
+        }
+        .verdict-true-style {
+            border-left: 6px solid #4ade80; /* Verde claro */
+            background-color: #1d3d2a;
+        }
+        .input-focus:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 1px #3b82f6;
+        }
+        .link-text {
+             /* Estilo padrão para links de fonte */
+             color: #60a5fa; /* blue-400 */
+             transition: color 0.2s;
+        }
+        .link-text:hover {
+            color: #3b82f6; /* blue-500 */
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen flex items-start justify-center">
+
+    <!-- Container Principal da Aplicação -->
+    <div class="w-full max-w-2xl app-card p-6 md:p-10 rounded-2xl transition-all duration-300">
+        
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-white mb-2 tracking-wider">
+                🔬 Detector de Fatos com IA
+            </h1>
+            <p class="text-gray-400 italic">
+                Verificação de credibilidade baseada em evidências reais (Gemini + Google Search).
+            </p>
+        </header>
+
+        <!-- Área de Input -->
+        <div id="input-area" class="mb-8">
+            <textarea id="news-input" rows="7" 
+                      class="w-full p-4 border border-gray-700 bg-gray-800 text-white rounded-xl focus:outline-none input-focus transition duration-150 resize-none placeholder-gray-500 text-base"
+                      placeholder="Cole aqui o texto da notícia para verificação. O Gemini fará uma busca na web para comprovar..."></textarea>
+            
+            <button id="check-button" 
+                    class="w-full mt-4 py-4 px-6 bg-blue-600 text-white font-bold text-lg rounded-xl shadow-lg hover:bg-blue-700 transition duration-200 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50 active:bg-blue-800">
+                Verificar com Gemini
+            </button>
+        </div>
+
+        <!-- Área de Carregamento e Mensagens -->
+        <div id="loading-message" class="hidden text-center p-4 bg-gray-700 text-blue-400 rounded-xl shadow-inner mb-6 border border-gray-600">
+            <svg class="animate-spin h-5 w-5 mr-3 inline-block text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Consultando fontes externas... O Gemini está analisando a credibilidade...
+        </div>
+        
+        <!-- Área de Resultados (Oculta por padrão) -->
+        <div id="results-area" class="hidden mt-8 border border-gray-700 rounded-xl shadow-lg p-5 bg-gray-800">
+            <h2 class="text-2xl font-bold text-white mb-5 border-b border-gray-700 pb-2">
+                Relatório de Credibilidade
+            </h2>
+
+            <!-- Veredito -->
+            <div id="verdict-box" class="p-4 rounded-xl shadow-xl mb-6 transition-all duration-300">
+                <p class="text-sm font-medium text-gray-300 mb-2">VEREDITO FINAL (Baseado na Web)</p>
+                <p id="verdict-text" class="text-3xl font-extrabold"></p>
+            </div>
+
+            <!-- Racional da IA -->
+            <div class="mb-6">
+                <h3 class="text-xl font-semibold text-white mb-3">Racional do Gemini</h3>
+                <div id="rationale-content" class="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                    <!-- O texto do racional gerado pela IA será inserido aqui -->
+                </div>
+            </div>
+
+            <!-- Fontes de Referência Reais -->
+            <div>
+                <h3 class="text-xl font-semibold text-white mb-3 border-t border-gray-700 pt-3">Fontes de Apoio (Google Search)</h3>
+                <ul id="sources-list" class="list-disc list-inside space-y-2 text-sm text-gray-500">
+                    <!-- Fontes reais do Grounding serão inseridas aqui -->
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Modal de Erro -->
+        <div id="error-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div class="bg-gray-800 p-6 rounded-xl shadow-2xl max-w-sm w-full border border-red-500">
+                <h3 class="text-xl font-bold text-red-400 mb-3">Erro de Comunicação</h3>
+                <p id="error-message" class="text-gray-300 mb-4">Houve uma falha na comunicação com a IA ou a notícia é muito curta.</p>
+                <button onclick="document.getElementById('error-modal').classList.add('hidden')" 
+                        class="w-full py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configurações da API
+        const API_KEY = ""; // A chave API é fornecida automaticamente pelo ambiente de execução
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+
+        // Elementos do DOM
+        const inputElement = document.getElementById('news-input');
+        const checkButton = document.getElementById('check-button');
+        const loadingMessage = document.getElementById('loading-message');
+        const resultsArea = document.getElementById('results-area');
+        const verdictBox = document.getElementById('verdict-box');
+        const verdictText = document.getElementById('verdict-text');
+        const rationaleContent = document.getElementById('rationale-content');
+        const sourcesList = document.getElementById('sources-list');
+        const errorModal = document.getElementById('error-modal');
+        const errorMessage = document.getElementById('error-message');
+
+        // Função utilitária para mostrar o modal de erro
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorModal.classList.remove('hidden');
+        }
+
+        // Função para aplicar o estilo do veredito
+        function applyVerdictStyle(verdictStatus) {
+            verdictBox.className = 'p-4 rounded-xl shadow-xl mb-6 transition-all duration-300';
+            verdictText.className = 'text-3xl font-extrabold';
+
+            // Padroniza o status para comparação (ignora acentos, caixa, etc.)
+            const status = verdictStatus.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+            if (status.includes('FALSO') || status.includes('DESINFORMACAO')) {
+                verdictBox.classList.add('verdict-false-style');
+                verdictText.classList.add('text-red-400');
+                return 'FALSO';
+            } else if (status.includes('NAO COMPROVADO') || status.includes('INCERTO') || status.includes('NAO VERIFICAVEL')) {
+                verdictBox.classList.add('verdict-unverified-style');
+                verdictText.classList.add('text-yellow-400');
+                return 'NÃO COMPROVADO';
+            } else {
+                verdictBox.classList.add('verdict-true-style');
+                verdictText.classList.add('text-green-400');
+                return 'VERDADEIRO';
+            }
+        }
+        
+        // ------------------------------------------------------------------
+        // Lógica de Chamada da API Gemini com Retry (Exponencial Backoff)
+        // ------------------------------------------------------------------
+
+        async function callGeminiAPI(userQuery, retries = 0) {
+            const systemPrompt = "Você é um analista de verificação de fatos de nível mundial. Sua tarefa é analisar o texto fornecido pelo usuário, verificar a veracidade das afirmações usando dados da web (Google Search) e fornecer uma análise concisa. A resposta DEVE ser estruturada em DUAS partes principais e o Veredito DEVE aparecer primeiro. Use apenas uma das seguintes palavras no início do Veredito: VERDADEIRO, FALSO, NÃO COMPROVADO. Formato esperado: 'Veredito: [VEREDICTO]\nRacional: [TEXTO DETALHADO]'. Use a língua portuguesa na resposta.";
+            
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                tools: [{ "google_search": {} }], // Habilita o Google Search Grounding
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (!candidate || !candidate.content?.parts?.[0]?.text) {
+                    throw new Error("Resposta da IA incompleta ou vazia.");
+                }
+
+                const text = candidate.content.parts[0].text;
+                
+                // Extrai as fontes do Grounding Metadata
+                let sources = [];
+                const groundingMetadata = candidate.groundingMetadata;
+                if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                    sources = groundingMetadata.groundingAttributions
+                        .map(attribution => ({
+                            uri: attribution.web?.uri,
+                            title: attribution.web?.title,
+                        }))
+                        .filter(source => source.uri && source.title);
+                }
+
+                return { text, sources };
+
+            } catch (error) {
+                console.error(`Tentativa ${retries + 1} falhou.`, error);
+                
+                // Tenta novamente com Exponential Backoff
+                if (retries < 3) {
+                    const delay = Math.pow(2, retries) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return callGeminiAPI(userQuery, retries + 1);
+                }
+                throw new Error("Falha ao se conectar com a API Gemini após várias tentativas.");
+            }
+        }
+
+        // Função principal de verificação
+        async function checkNews() {
+            const newsText = inputElement.value.trim();
+
+            if (newsText.length < 50) {
+                showError("O texto é muito curto. Cole um conteúdo com pelo menos 50 caracteres para que o Gemini possa fazer uma pesquisa relevante.");
+                return;
+            }
+
+            // Esconde resultados antigos e mostra loading
+            resultsArea.classList.add('hidden');
+            checkButton.disabled = true;
+            checkButton.textContent = 'Consultando a Web...';
+            loadingMessage.classList.remove('hidden');
+            
+            try {
+                const { text: geminiResponse, sources } = await callGeminiAPI(newsText);
+
+                // 1. Processamento da Resposta do Gemini
+                const parts = geminiResponse.split('Racional:');
+                const verdictLine = parts[0].trim().replace('Veredito:', '').trim();
+                const rationaleText = parts.length > 1 ? parts[1].trim() : "Racional não especificado pela IA.";
+                
+                // 2. Aplica estilo e determina o status
+                const finalStatus = applyVerdictStyle(verdictLine);
+                verdictText.textContent = finalStatus.toUpperCase();
+                
+                // 3. Atualiza o Racional e Veredito
+                rationaleContent.textContent = rationaleText;
+
+                // 4. Atualiza as Fontes
+                sourcesList.innerHTML = '';
+                if (sources.length > 0) {
+                    sources.forEach(source => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<a href="${source.uri}" target="_blank" rel="noopener noreferrer" class="link-text" title="${source.uri}">
+                            ${source.title}
+                        </a>`;
+                        sourcesList.appendChild(li);
+                    });
+                } else {
+                    sourcesList.innerHTML = `<li class="text-gray-500">Nenhuma fonte primária de internet foi utilizada para esta verificação.</li>`;
+                }
+                
+                // 5. Mostra a área de resultados
+                resultsArea.classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Erro fatal durante a verificação:", error);
+                showError("Não foi possível completar a verificação: " + error.message);
+            } finally {
+                // Remove loading e reativa o botão
+                loadingMessage.classList.add('hidden');
+                checkButton.textContent = 'Verificar com Gemini';
+                checkButton.disabled = false;
+                
+                // Rola para a área de resultados (melhora UX mobile)
+                resultsArea.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // Adiciona o listener ao botão
+        window.onload = () => {
+             checkButton.addEventListener('click', checkNews);
+             inputElement.focus();
+        };
+    </script>
+</body>
+</html>
